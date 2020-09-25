@@ -1,0 +1,66 @@
+;;Procedure per l'esecuzione del processo di reclutamento dei droni
+
+;;Cambio di stato
+to becomeWaiting
+  
+  set drone.state "WAITING"
+  set color brown
+  face min-one-of patches with [target = true] [distance myself] ;;si gira verso il taget
+  
+end
+
+to becomeExecutor
+  
+  set drone.state "EXECUTION"
+  set color violet
+  
+end
+
+to becomeExplorer
+  
+  set drone.state "EXPLORER"
+  set color green
+  
+end
+
+;;Controllo della possibilità di iniziare l'esecuzione
+to checkPossibleExecution [selectedPatch]
+                              
+  let dronesInExecutionRange (count drones in-radius execution.radius)
+  
+  if (dronesInExecutionRange >= sufficientRobots)[ 
+    Execution selectedPatch
+  ]
+  
+end
+
+;;Procedura di elaborazione del target
+to Execution [selectedPatch]
+  ask selectedPatch [
+    set status "underExecution"
+    set pcolor sky
+  ]
+  
+  ask n-of sufficientRobots drones in-radius execution.radius [ ;;ne bastano "sufficientRobots" per l'esecuzione
+    becomeExecutor 
+    set executionTicksLeft executionTime
+    set selectedTarget selectedPatch
+  ]  
+  
+  ask drones in-radius execution.radius with[ drone.state = "WAITING"][ ;;libero i droni superflui
+    becomeExplorer
+  ]
+    
+end
+
+to waitExecution  
+  if (executionTicksLeft = 0) [
+    ask selectedTarget [
+      set status "executed"
+      set pcolor 98 
+      set tgt.checked tgt.checked + 1
+    ]   
+    becomeExplorer
+  ]
+  set executionTicksLeft executionTicksLeft - 1
+end

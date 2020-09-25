@@ -1,0 +1,317 @@
+globals [
+    repulsiveStigmergy?
+
+    mark.repulsiveStartIntensity                ;; corrisponde a deltaTAU(0)
+    mark.sensingRange                           ;; corrisponde a Rs
+    track.EvaporationRateTimeUnit               ;; corrisponde a ERTU%
+
+    a1
+    a2
+    epsilon
+    phi
+    eta
+    lambda
+]
+
+patches-own [
+    track.repulsiveIntensity                    ;; corrisponde a TAUc(t)
+    track.sumRepulsiveDeltaIntensity            ;; corrisponde alla sommatoria dei deltaTAUc(k,t)
+    track.repulsiveDeltaEvap                    ;; corrisponde a CSIc(t)
+    ticksFromLastVisit
+]
+
+to setupRepulsiveVariables
+
+    set mark.repulsiveStartIntensity 2
+    set mark.sensingRange 4
+    set track.EvaporationRateTimeUnit 0.2
+    set repulsiveStigmergy? true
+
+    set a1 0.5
+    set a2 0.5
+    set epsilon random-float 1
+    set phi 1
+    set eta 0.9
+    set lambda 1
+
+    ask patches with [obstacle = false][
+        set track.repulsiveIntensity 0
+        set track.sumRepulsiveDeltaIntensity 0
+        set track.repulsiveDeltaEvap 0
+    ]
+    
+    ;;ask patches with [obstacle = true][ ;;ottimizzazione dell'obstacle avoidance utilizzando la stigmergia
+        ;;set track.repulsiveIntensity 1000 
+    ;;]
+    
+    ask drones [
+        set drone.state "EXPLORER"
+    ]
+
+end
+
+;;================================================= ALGORITHM 1 ==================================================
+
+to algorithm_1
+    ask drones with [ drone.state = "EXPLORER" ] [
+        let nextPatch smellRepulsivePheromone
+        if (nextPatch != nobody) [ 
+          face nextPatch 
+        ]
+        obstacleAvoidanceRandom
+        findTarget
+    ]
+    ask drones with [drone.state = "EXPLORER"][
+      ;;releaseRepulsivePheromoneRound 
+      releaseRepulsivePheromoneSquare  
+    ]   
+    ask patches [ 
+      updateRepulsivePheromone              
+    ]    
+    ask patches [ 
+      updateRepulsiveVariables
+    ]   
+    checkTargetsFounded
+end
+
+;;======================================= CALCOLO DELLA PATCH VERSO CUI PUNTARE =======================================
+
+to-report smellRepulsivePheromone
+
+    let denominator 0
+    let firstTerm 0
+    let secondTerm 0
+    let tmpDenominator 0
+    let minIntensityPatch nobody;; patch con l'intensità feromonica minore (di default non è nessuna)
+
+    ask neighbors [
+        set firstTerm track.repulsiveIntensity ^ phi
+        set secondTerm eta ^ lambda
+        set tmpDenominator firstTerm * secondTerm
+        set denominator denominator + tmpDenominator
+    ]
+
+    let maxIntensity 0
+    let maxIntensityPatch max-one-of patches [ track.repulsiveIntensity ]
+    ask maxIntensityPatch [
+        set maxIntensity track.repulsiveIntensity
+    ]
+
+    let minProb (maxIntensity ^ phi) * (eta ^ lambda)
+    let numerator 0
+    let tmpProb 0
+    ask neighbors [
+        if (denominator != 0) [
+            set firstTerm track.repulsiveIntensity ^ phi
+            set secondTerm eta ^ lambda
+            set numerator firstTerm * secondTerm
+            set tmpProb numerator / denominator
+            if (tmpProb < minProb) [
+                set minIntensityPatch self ;;questa patch
+                set minProb tmpProb
+            ]
+        ]
+    ]
+
+    report minIntensityPatch ;;la prossima patch è quella con intensità minore o "nobody" se non ci sono tracce stigmergetiche nei dintorni
+
+end
+
+;;======================================= RILASCIO DEL FEROMONE DIFFUSO ==========================================
+
+to releaseRepulsivePheromoneRound  
+   let dist 0
+   let xcoord xcor
+   let ycoord ycor  
+   ask patches with [ distance myself <= mark.sensingRange ][
+       set track.sumRepulsiveDeltaIntensity 
+           track.sumRepulsiveDeltaIntensity 
+           + computeRepulsiveDeltaIntensity (distance myself - 1)
+       set ticksFromLastVisit 0 
+   ]
+end
+
+to releaseRepulsivePheromoneSquare 
+   let dist 0
+   let xcoord xcor
+   let ycoord ycor  
+   ask patches with [ abs(pxcor - xcoord) <= mark.sensingRange 
+                      and abs(pycor - ycoord) <= mark.sensingRange] [
+       ifelse( abs(pxcor - xcoord) > abs(pycor - ycoord))[
+         set dist abs(pxcor - xcoord)
+       ][
+         set dist abs(pycor - ycoord)
+       ]
+       set track.sumRepulsiveDeltaIntensity 
+           track.sumRepulsiveDeltaIntensity 
+           + computeRepulsiveDeltaIntensity (dist)
+       set ticksFromLastVisit 0
+       ]
+end
+
+
+to-report computeRepulsiveDeltaIntensity [ dist ]
+    set epsilon random-float 1
+    ifelse (dist <= mark.sensingRange) [
+        let exponent (- dist) / a1
+        let firstTerm mark.repulsiveStartIntensity * (e ^ exponent)
+        let secondTerm epsilon / a2
+
+        report (firstTerm + secondTerm)
+    ]
+    [
+        report 0
+    ]
+end
+
+;;============================ AGGIORNAMENTO DEL FEROMONE REPULSIVO CON EVAPORAZIONE =============================
+
+to updateRepulsivePheromone
+
+    let rho ticksFromLastVisit * track.EvaporationRateTimeUnit 
+    set track.repulsiveDeltaEvap rho * track.repulsiveIntensity
+    set track.repulsiveIntensity track.repulsiveIntensity - track.repulsiveDeltaEvap
+    set track.repulsiveIntensity track.repulsiveIntensity + track.sumRepulsiveDeltaIntensity
+    if (track.repulsiveIntensity < 0) [
+      set track.repulsiveIntensity 0
+    ]
+    
+end
+
+;;===================================== AGGIORNAMENTO DELLE VARIABILI REPULSIVE ==================================
+
+to updateRepulsiveVariables
+    set track.sumRepulsiveDeltaIntensity 0
+    set ticksFromLastVisit ticksFromLastVisit + 1
+    ;;updateColorRepulsivePatches ;;DEBUG
+end
+
+;;================================ OBSTACLE AVOIDANCE ========================================
+
+;; Controlla se la patch davanti è libera o meno
+
+to-report obstacleAhead
+  let isObstacle false
+  ifelse(patch-ahead 1 != nobody)[ ;; se la patch davanti non è fuori dal campo
+    if any? turtles-on patch-ahead 1 [
+      set isObstacle true
+    ]
+    ask patch-ahead 1[
+      if(obstacle = true)[ ;;se è un ostacolo
+        set isObstacle true
+      ]
+    ]
+  ]
+  [
+    set isObstacle true ;; se è fuori dal campo
+  ]
+  report isObstacle
+end
+
+to obstacleAvoidanceRandom
+   let isObstacle? obstacleAhead ;; controlla se davanti a se è presente un ostacolo
+        ifelse (isObstacle? = false) [
+            move-to patch-ahead 1 ;; se non ci sono ostacoli va avanti
+        ]
+        [
+          let clearNeighbor nobody ;;patch libera
+          let patchFinded false ;;true se è stata trovata una patch libera
+          ask neighbors[ ;;cerca una patch a caso, tra quelle vicine, libera, se la trova si sposta su di essa, altrimenti rimane fermo
+            if(not patchFinded = true)[
+              set clearNeighbor self 
+              ask myself[
+                face clearNeighbor
+                set isObstacle? obstacleAhead ;;controlla se la patch è libera 
+                if(isObstacle? = false) [
+                  move-to patch-ahead 1 ;;se lo è va avanti
+                  set patchFinded true
+                ]
+              ]
+            ]
+          ]
+        ] ;; se non trova patch libere rimane fermo
+end
+
+;;=================================Target=====================================================
+
+to checkTargetsFounded
+  ask patches [
+    if(target = true and status = "found" and execution.complete = false)[
+      set pcolor pink
+    ]
+  ]
+end
+
+to findTarget
+ ask patches in-radius drone.executionRange [
+   if(target = true and not(status = "found"))[
+     set status "found" ;; per riconoscere i target
+     ask myself[
+       set drone.state "COORDINATOR" ;;se il targhet è nel raggio di azione il drone diventa coordinatore ;;<---------------------------------------------- commentare per testare solo esplorazione
+       set drone.coordinator myself
+       set color yellow ;; per debug
+       ask drones in-radius drone.wirelessRange [ ;;(abc) serve a ricalcolare il taget se spunta uno nuovo
+         set drone.targetSelected []
+       ]
+     ]
+   ] 
+ ]
+end
+
+;;==================================================== DEBUG =====================================================
+
+to updateColorRepulsivePatches
+  if(pcolor != red and pcolor != 5)[
+    
+    if(track.repulsiveIntensity >= 80.0)[
+      set pcolor 41
+    ]
+    
+    if(track.repulsiveIntensity > 40.0 and track.repulsiveIntensity < 80.0)[
+      set pcolor 42
+    ]
+    
+    if(track.repulsiveIntensity > 20.0 and track.repulsiveIntensity < 40.0)[
+      set pcolor 43
+    ]
+    
+    if(track.repulsiveIntensity > 5.0 and track.repulsiveIntensity < 20.0)[
+      set pcolor 44
+    ]
+    
+    if(track.repulsiveIntensity > 4.0 and track.repulsiveIntensity < 5.0)[
+      set pcolor 45
+    ]
+    
+    if(track.repulsiveIntensity > 3.0 and track.repulsiveIntensity < 4.0)[
+      set pcolor 46
+    ]
+    
+    if(track.repulsiveIntensity > 2.0 and track.repulsiveIntensity < 3.0)[
+      set pcolor 47
+    ]
+    
+    if(track.repulsiveIntensity > 1.0 and track.repulsiveIntensity < 2.0)[
+      set pcolor 48
+    ]
+    
+    if(track.repulsiveIntensity > 0.0 and track.repulsiveIntensity < 1)[
+      set pcolor 49
+    ]
+    
+    if(track.repulsiveIntensity = 0.0)[
+      set pcolor 0
+    ]
+  ]
+end
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,77 @@
+globals [
+  beta0 ;;initial attractiveness at Euclidean distance=0
+  gamma ;;absorption coefficient
+  alpha ;;randomization parameter
+  sigma ;;scaling factor controlling distance of visibility
+]
+
+
+to setupDronesFTS ;;procedure to set parameters and initialize some drone variables
+    set beta0 0.5
+    set gamma 1 / world-width
+    set alpha 0.2
+    set sigma 1
+end
+
+;;============================================== FTS-RR Algorithm =====================================================
+
+to fts_rr
+    updateState
+    ask drones with [drone.state = "RECRUITED"] [
+        let index 0
+        set index targetChoice drone.targetPatchList
+        set drone.targetSelected item index drone.targetPatchList
+        computeNextStep drone.targetSelected
+    ]
+end
+
+;;================================================ Evaluate Beta & Select Target =======================================
+
+to-report targetChoice[targetList] 
+    let dist 0
+    let xcoord 0
+    let ycoord 0
+    let beta 0
+    let maxAttractiveness 0
+    let chosenTarget 0
+    let index 0
+    foreach targetList [
+        set xcoord item 0 ?
+        set ycoord item 1 ?
+        set dist sqrt((pxcor - xcoord) ^ 2 + (pycor - ycoord) ^ 2)
+        set beta beta0 * e ^ (- gamma * dist ^ 2)
+        if (beta > maxAttractiveness) [
+            set maxAttractiveness beta
+            set chosenTarget index
+         ]
+        set index index + 1
+    ]  
+    set drone.beta maxAttractiveness
+    report chosenTarget
+end
+
+;;======================================== Next Step Computation ======================================================
+
+to computeNextStep [targetCoordinates] 
+  let targetx (item 0 targetCoordinates)
+  let targety (item 1 targetCoordinates)
+  let nextXCoor xcor
+  let nextYCoor ycor
+  if(drone.beta * (targetx - xcor)  +  drone.apha_rr * (sigma - (1 / 2)) > 0)[
+    set nextXCoor nextXCoor + 1
+  ]
+  if(drone.beta * (targetx - xcor)  +  drone.apha_rr * (sigma - (1 / 2)) < 0)[
+    set nextXCoor nextXCoor - 1
+  ]
+  if(drone.beta * (targety - ycor)  +  drone.apha_rr * (sigma - (1 / 2)) > 0)[
+    set nextYCoor nextYCoor + 1
+  ]
+  if(drone.beta * (targety - ycor)  +  drone.apha_rr * (sigma - (1 / 2)) < 0)[
+    set nextYCoor nextYCoor - 1
+  ]
+  let nextPatch patch nextXCoor nextYCoor
+  if(not (nextXCoor = xcor and nextYCoor = ycor))[
+	  face nextPatch
+      obstacleAvoidanceRandom
+  ]
+end

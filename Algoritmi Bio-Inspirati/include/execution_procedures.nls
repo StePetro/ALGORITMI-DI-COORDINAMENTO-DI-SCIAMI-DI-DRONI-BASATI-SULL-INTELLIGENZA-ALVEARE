@@ -1,0 +1,77 @@
+globals [ 
+  executionTime
+  percentageTargetsExecuted
+  drone.executionRange ;;range intorno al coordinatore per il quale i droni possono diventare esecutori
+]
+
+patches-own [
+    execution.complete 
+]
+
+  
+to setupExecution 
+  set executionTime 1
+  set drone.executionRange sensing.radius
+  set percentageTargetsExecuted 0
+   ask drones [
+      set drone.ExecutionTicksLeft ExecutionTime
+   ]
+    ask patches [
+      set execution.complete  false
+    ]
+end
+
+;;================================================= EXECUTION_ALGORITHM ==================================================
+
+to executionAlgorithm 
+    ask drones With [ drone.state = "EXECUTION" ] [
+        ask drones in-radius (drone.executionRange) 
+                   with[drone.state = "WAITING" and drone.coordinator = myself ][
+          set drone.state "EXECUTION"
+          set color violet 
+        ]
+        set drone.ExecutionTicksLeft drone.ExecutionTicksLeft - 1
+        if(drone.ExecutionTicksLeft <= 0)[
+          endExecution
+        ]
+    ]
+    
+    checkTargetsComplete  
+end
+
+;;================================================= Completamento Esecuzione ==================================================
+
+to endExecution
+    ask drones in-radius (drone.executionRange) 
+               with [drone.state = "EXECUTION" and drone.coordinator = myself][
+      set drone.state "EXPLORER"
+      set drone.targetPatchList []
+      set drone.ExecutionTicksLeft executionTime 
+      set drone.coordinator nobody  
+    ]
+    ask patches in-radius (drone.executionRange) with[target = true][ 
+      set execution.complete true
+    ]
+    set drone.state "EXPLORER"
+    set drone.targetPatchList []
+    set drone.ExecutionTicksLeft executionTime 
+    set drone.coordinator nobody 
+end
+
+;;=================================Target Eseguiti=====================================================
+
+to checkTargetsComplete
+  let nTarget count patches with [target = true ]
+  let nExecuted 0
+  ask patches [
+      if(target = true and execution.complete = true)[
+        set pcolor white
+        set nExecuted nExecuted + 1
+      ]
+  ]
+  ifelse(nTarget = 0)[
+    set percentageTargetsExecuted 0
+  ][
+   set percentageTargetsExecuted (nExecuted / nTarget) * 100
+  ]  
+end

@@ -1,0 +1,124 @@
+;; ================================================ ;;
+;; Artificial Bee Colony optimization for robot     ;;
+;; recuitment (ABC-RR)                              ;;
+;; ================================================ ;;
+
+;;================================================= ABC-RR ==================================================
+
+to abc_rr
+	updateState ;; Ogni drone modifica il proprio stato in base alla presenza di richieste di aiuto
+
+	ask drones with [ drone.state = "RECRUITED"] [
+  
+		let index 0
+    let TargetOutOfRange false
+    ;; findTarget dà la possibilità anche ai droni reclutati di diventare coordinatori se incontrano un target
+    
+    if(not (drone.targetSelected = []))[ ;;devo ricalcolare il targhet anche se esco da un wirelessRange ma rientro subito in un altro
+       let x ((item 0 drone.targetSelected) - xcor)
+       let y ((item 1 drone.targetSelected) - ycor)
+       if (distance (patch-at x y) > drone.wirelessRange)[
+         set TargetOutOfRange true
+       ]
+    ]
+    
+    if(drone.targetSelected = [] or TargetOutOfRange = true)[  ;; if(True) se si vuole ricalcolare a ogni tick il coordinatore come indicato nel paper  
+      if (length drone.targetPatchList > 1) [
+        set index computeProbability drone.targetPatchList ;; Seleziona un target secondo la "spinning wheel" nella lista, restituendone l'indice
+      ]
+      set drone.targetSelected item index drone.targetPatchList ;; Setto target come il valore i-esimo nella lista targetPatchList
+    ]
+
+		computePosition drone.targetSelected  ;; Trova la prossima cella in cui il drone deve andare    
+	]
+end
+
+
+
+
+;;================================================= Calcolo probabilità ==================================================
+
+to-report computeProbability [lst]
+	let dist 0
+	let mu 0
+	let sumMu 0
+	let probability 0
+	let highest 0
+	let index 0
+	let retIndex 0
+	let xcord 0
+	let ycord 0
+  let probabilityList []
+  let finded false
+  let chosen 0
+	foreach lst [	
+		set xcord item 0 ? 
+		set ycord item 1 ? 
+		set dist sqrt((pxcor - xcord) ^ 2 + (pycor - ycord) ^ 2)
+		set mu dist ^ -1 
+		set sumMu sumMu + mu
+	]
+	foreach lst [
+		set xcord item 0 ? 
+		set ycord item 1 ? 
+		set dist sqrt((pxcor - xcord) ^ 2 + (pycor - ycord) ^ 2)
+		set mu dist ^ -1
+		set probability mu / sumMu
+    set probabilityList lput probability probabilityList 
+	]
+  let p 0
+  while [ finded = false ] [
+    foreach probabilityList [
+      if( random-float 1 < (p + ?) )[
+        if ( finded = false)[
+          set finded true 
+          set chosen index 
+        ]
+      ]
+      set p p + ?
+      set index ((index + 1) mod (length probabilityList))
+    ]    
+  ]
+	report index
+end
+
+
+
+;;================================================= Calcolo e Spostamento Nuova posizione ==================================================
+
+to computePosition [targetCoordinates]
+  let targetx (item 0 targetCoordinates)
+  let targety (item 1 targetCoordinates)
+  let nextXCor xcor
+  let nextYCor ycor
+
+  let xcoeff (drone.phi_rr * (xcor - targetx))
+  let ycoeff (drone.phi_rr * (ycor - targety))
+  
+  if(xcoeff > 0)[
+    set nextXCor nextXCor + 1
+  ]
+  if(xcoeff < 0)[
+    set nextXCor nextXCor - 1
+  ]
+  if(ycoeff > 0)[
+    set nextYCor nextYCor + 1
+  ]
+  if(ycoeff < 0)[
+    set nextYCor nextYCor - 1
+  ]
+  
+  let nextPatch patch nextXcor nextYcor
+	
+  if( not (nextPatch = nobody))[
+      face nextPatch
+   ]
+  
+  if(not (nextXCor = xcor and nextYCor = ycor))[
+      obstacleAvoidanceRandom
+  ]
+  
+end
+
+
+

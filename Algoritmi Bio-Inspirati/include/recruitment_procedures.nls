@@ -1,0 +1,112 @@
+globals [  ;; variabili gloabli
+  drone.wirelessRange ;; corrisponde a Rt
+  sufficientRobots ;; numero di droni da recrutare
+  drone.overlapDistance ;; utilizzo la distanza di overlap per entrare nello stato di wait
+  drone.maxIdleTicks ;;numero massimo di tick in cui un drone RECRUITED può rimanere fermo
+]
+
+to setupDronesRecruitment 
+    ask drones [
+      set drone.targetPatchList [] 
+      set drone.targetSelected []
+      set drone.idleTicksLeft drone.maxIdleTicks
+      set drone.coordinator nobody
+      set drone.nRecruited 0 
+    ]
+    set drone.wirelessRange 20 ;;lo inizializzo qua invece che nella configurazione dello scenario per rendere copatibili tutti gli scenari
+    set sufficientRobots 3 ;;numero di droni necessari per iniziare la fase di esecuzione
+    set drone.overlapDistance drone.radius * 2 
+    set drone.maxIdleTicks 20 ;;(abc) per evitare deadlock 
+end
+
+
+;;===================================== AGGIORNAMENTO DELLE RICHIESTE NEI DRONI ==================================
+
+to sendRequest 
+    let xcord pxcor 
+    let ycord pycor
+    let dist 0 
+    ask drones with [(drone.state = "EXPLORER") or (drone.state = "RECRUITED")] [
+        set dist sqrt((pxcor - xcord) ^ 2 + (pycor - ycord) ^ 2) 
+        if (dist < drone.wirelessRange) [
+          set drone.targetPatchList lput (list xcord ycord) drone.targetPatchList
+        ]
+    ]
+end
+
+
+;;===================================== AGGIORNAMENTO DELLE VARIABILI DEL DRONE ==================================
+to updateState
+  let tmpx 0
+  let tmpy 0
+  let trgtX 0
+  let trgtY 0
+  let coorDrone nobody
+  let dist 0
+  let rotationAngle 0
+  ask drones with[drone.state = "RECRUITED"][
+    set tmpx xcor
+    set tmpy ycor
+    set coorDrone drone.coordinator
+    let dr other drones
+    ask dr[
+      set dist distancexy tmpx tmpy
+      if (dist < drone.executionRange) and (drone.state = "COORDINATOR") and (coorDrone = nobody) [
+        set coorDrone self
+        set trgtX xcor
+        set trgtY ycor
+        set drone.nRecruited drone.nRecruited + 1
+        if(drone.nRecruited >= sufficientRobots - 1)[ 
+          set drone.nRecruited 0 
+          set drone.state "EXECUTION" 
+          set color violet 
+        ]
+      ]
+    ]
+
+    if not (coorDrone = nobody) [
+      set drone.state "WAITING"
+      set color brown ;; per debug
+      set drone.coordinator coorDrone 
+      face drone.coordinator
+    ]
+    set coorDrone nobody
+  ]
+  ask drones with [ drone.state = "RECRUITED" or drone.state = "EXECUTION"] [
+    set drone.targetPatchList []
+  ]
+  ask drones with [ drone.state = "COORDINATOR" ] [
+    sendRequest
+  ]
+  ask drones with [ (drone.state = "EXPLORER") or (drone.state = "RECRUITED") ] [
+    ifelse (length drone.targetPatchList > 0) [
+      if(not (drone.state = "RECRUITED"))[
+        set drone.phi_rr (1 - random 3)
+        set drone.apha_rr random-float 1
+        set drone.r_rr random-float 1 
+        set drone.virtualVx cos heading 
+        set drone.virtualVy sin heading 
+        set drone.state "RECRUITED"
+        set color blue ;; per debug
+      ]    
+    ][
+      set drone.state "EXPLORER"
+      set color green ;; per debug
+    ]
+  ]
+ ask drones with [ drone.state = "RECRUITED" and drone.phi_rr = 0 ][ 
+   set drone.IdleTicksLeft drone.IdleTicksLeft - 1 
+    if(drone.IdleTicksLeft <= 0)[
+      set drone.IdleTicksLeft drone.maxIdleTicks
+      set drone.phi_rr (1 - random 3)
+    ]
+ ]
+ ask drones with [drone.state = "COORDINATOR"][
+   ask patches in-radius (drone.executionRange)[
+     if(target = true and not(status = "found"))[
+       set status "found"
+     ]
+   ]
+ ]
+
+end

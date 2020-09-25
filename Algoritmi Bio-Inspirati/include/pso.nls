@@ -1,0 +1,90 @@
+;; ================================================ ;;
+;; Particle swarm optimization for robot recuitment ;;
+;; (PSO-RR)                                         ;;
+;; ================================================ ;;
+
+globals [
+  droneInertialWeight      ;; massa inerziale dei droni.
+  accelerationCoefficient  ;; coefficiente di accelerazione
+]
+
+to setupPSORRVariables
+  set droneInertialWeight 0.729
+  set accelerationCoefficient 2
+end
+
+
+to pso_rr
+  updateState
+  ask drones with [ drone.state = "RECRUITED"] [
+    let index 0
+    if (length drone.targetPatchList > 1) [
+      set index computeProbabilityPso drone.targetPatchList 
+    ]
+      set drone.targetSelected item index drone.targetPatchList
+    computePositionPso drone.targetSelected  
+  ]
+end
+
+to-report computeProbabilityPso [lst]
+  let dist world-width
+  let index 0
+  let tmpIndex 0
+  let xcord 0
+  let ycord 0
+  let finded false
+  let tmpdist 0
+  foreach lst [  
+    set xcord item 0 ?
+    set ycord item 1 ?
+    set tmpdist sqrt((pxcor - xcord) ^ 2 + (pycor - ycord) ^ 2)
+    if( tmpdist < dist)[
+      set index tmpIndex
+      set dist tmpdist
+    ]    
+    set tmpIndex tmpIndex + 1   
+  ]
+  report index 
+end
+
+
+
+to computePositionPso [targetCoordinates]
+    let targetX (item 0 targetCoordinates)
+    let targetY (item 1 targetCoordinates)
+    let newDestinationCellX 0
+    let newDestinationCellY 0
+    set drone.virtualVx ( (droneInertialWeight * drone.virtualVx) 
+        + (drone.r_rr * accelerationCoefficient * (targetX - xcor)) )
+    set drone.virtualVy ( (droneInertialWeight * drone.virtualVy) 
+        + (drone.r_rr * accelerationCoefficient * (targetY - ycor)) )
+    if drone.virtualVx = 0 [
+      set newDestinationCellX xcor
+    ]
+    if drone.virtualVx > 0 [
+      set newDestinationCellX xcor + 1
+    ]
+    if drone.virtualVx < 0 [
+      set newDestinationCellX xcor - 1
+    ]
+    if drone.virtualVy = 0 [
+      set newDestinationCellY ycor
+    ]
+    if drone.virtualVy > 0 [
+      set newDestinationCellY ycor + 1
+    ]
+    if drone.virtualVy < 0 [
+      set newDestinationCellY ycor - 1
+    ]
+    if(not (patch newDestinationCellX newDestinationCellY = nobody))[
+       face patch newDestinationCellX newDestinationCellY     
+    ]
+    if(not (drone.virtualVx = 0 and drone.virtualVy = 0))[
+      obstacleAvoidanceRandom
+    ]  
+end
+
+
+
+
+

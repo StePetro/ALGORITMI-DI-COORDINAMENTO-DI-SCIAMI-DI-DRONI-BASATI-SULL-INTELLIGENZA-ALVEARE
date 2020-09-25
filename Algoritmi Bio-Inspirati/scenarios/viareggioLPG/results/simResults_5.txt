@@ -1,0 +1,20 @@
+Time Slot: 0
+Targets Amount: 54
+Found: 15
+Percentage: 27.77777777777778
+Average Percentage: 27.77777777777778
+Time Slot: 1
+Targets Amount: 63
+Found: 22
+Percentage: 34.92063492063492
+Average Percentage: 31.349206349206348
+Time Slot: 2
+Targets Amount: 82
+Found: 28
+Percentage: 34.146341463414636
+Average Percentage: 32.28158472060911
+Time Slot: 3
+Targets Amount: 90
+Found: 29
+Percentage: 32.22222222222222
+Average Percentage: 32.26674409601239

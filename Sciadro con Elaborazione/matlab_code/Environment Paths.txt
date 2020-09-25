@@ -1,0 +1,3 @@
+pathNetLogo = "/home/ing-research/Desktop/Petrocchi/netlogo-5.3.1-64/app/NetLogo.jar"
+modelPath = /home/ing-research/Desktop/Petrocchi/drones-swarm-master/
+modelFileName = SCDsrc.nlogo
